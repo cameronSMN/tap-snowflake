@@ -89,9 +89,6 @@ class SnowflakeConnector(SQLConnector):
         # ARGS:   ({'database': 'BI', 'authenticate_with_dope': True},)
         config = args[0] or {}
 
-        print("args", args)
-        print("kwargs", kwargs)
-
         # DOPE - convert the database name to <project_name>__<workspace>__<database>
         if str(config.get('authenticate_with_dope')): 
             self.logger.info("Authenticating with DOPE.")
@@ -134,7 +131,7 @@ class SnowflakeConnector(SQLConnector):
         # DOPE behaviour
         if self.config.get("authenticate_with_dope"):
             self.logger.info(f"Creating sqlalchemy engine using DOPE.")
-
+            self.logger.info(self.config)
             # db = str(self.config.get('database'))
             # project_name = get_project_name()
             # workspace_name = get_workspace_name()
@@ -176,7 +173,6 @@ class SnowflakeConnector(SQLConnector):
             if schema_name.lower() != "information_schema"
         ]
 
-        print("SCHEMA: ", schema_names)
         # DOPE - Use schema from config if provided otherwise search through all 
         # schemas except for dope (this throws an error)
         if self.config.get("authenticate_with_dope"):
@@ -197,7 +193,6 @@ class SnowflakeConnector(SQLConnector):
                     )
                     result.append(catalog_entry.to_dict())
 
-        exit(1)
         return result
 
     def get_table_profile(

@@ -14,8 +14,10 @@ plugins:
     - name: user
     - name: password
       kind: password
+      sensitive: true
     - name: account
       kind: password
+      sensitive: true
     - name: role
     - name: warehouse
     - name: database
