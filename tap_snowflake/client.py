@@ -21,6 +21,13 @@ import singer_sdk.helpers._typing
 from snowflake.sqlalchemy import URL
 from sqlalchemy.sql import text
 
+# DOPE-specific imports
+from dope.dope_config import get_project_name
+from dope.dope_state import get_workspace_name
+from dope.lib import fully_qualified_database_name
+from dope.session import get_session
+from dope.snowflake import get_db_info
+
 unpatched_conform = singer_sdk.helpers._typing._conform_primitive_property
 
 
@@ -74,6 +81,31 @@ class TableProfile:
 class SnowflakeConnector(SQLConnector):
     """Connects to the Snowflake SQL source."""
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self.table_cache: dict = {}
+        self.schema_cache: dict = {}
+
+        # The config dict is contained in the args tuple
+        # ARGS:   ({'database': 'BI', 'authenticate_with_dope': True},)
+        config = args[0] or {}
+
+        # DOPE - convert the database name to <project_name>__<workspace>__<database>
+        if str(config.get('authenticate_with_dope')): 
+            self.logger.info("Authenticating with DOPE.")
+            db = str(config.get('database'))
+            project_name = get_project_name()
+            workspace_name = get_workspace_name()
+
+            if not workspace_name:
+                raise RuntimeError
+
+            config["database"] = fully_qualified_database_name(project_name, workspace_name, db)
+            super().__init__(config, **kwargs)
+
+        # Otherwise
+        else:
+            super().__init__(*args, **kwargs)
+
     @classmethod
     def get_sqlalchemy_url(cls, config: dict) -> str:
         """Concatenate a SQLAlchemy URL for use in connecting to the source."""
@@ -89,17 +121,31 @@ class SnowflakeConnector(SQLConnector):
 
         return URL(**params)
 
+
     def create_engine(self) -> sqlalchemy.engine.Engine:
         """Create SQLAlchemy engine instance.
 
         Returns:
             A SQLAlchemy engine.
         """
-        return sqlalchemy.create_engine(
-            self.sqlalchemy_url,
-            echo=False,
-            pool_timeout=10,
-        )
+        # DOPE behaviour
+        if self.config.get("authenticate_with_dope"):
+            self.logger.info(f"Creating sqlalchemy engine using DOPE.")
+
+            engine = sqlalchemy.create_engine("snowflake://",  creator=lambda: get_session().snowflake_connection(database=self.config['database']), future=True)
+
+            with get_session().snowflake_connection() as connection, connection.cursor() as cs:
+                if self.config['database'] not in [db[3] for db in get_db_info(cs)]:
+                    raise Exception(f"Database '{self.config['database']}' does not exist or the current user context does not have access to it.")
+
+            return engine
+        # Default behaviour
+        else:
+            return sqlalchemy.create_engine(
+                self.sqlalchemy_url,
+                echo=False,
+                pool_timeout=10,
+            )
 
     # overridden to filter out the information_schema from catalog discovery
     def discover_catalog_entries(self) -> list[dict]:
@@ -117,6 +163,16 @@ class SnowflakeConnector(SQLConnector):
             for schema_name in self.get_schema_names(engine, inspected)
             if schema_name.lower() != "information_schema"
         ]
+
+        # DOPE - Use schema from config if provided otherwise search through all 
+        # schemas except for dope (this throws an error)
+        if self.config.get("authenticate_with_dope"):
+            if self.config.get("schema"):
+                schema_names = [self.config.get("schema")]
+            else:
+                if "dope" in schema_names:
+                    schema_names.remove("dope")
+
         for schema_name in schema_names:
             # Iterate through each table and view
             for table_name, is_view in self.get_object_names(

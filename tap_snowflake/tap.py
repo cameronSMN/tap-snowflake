@@ -15,23 +15,29 @@ class TapSnowflake(SQLTap):
     # From https://docs.snowflake.com/en/user-guide/sqlalchemy.html#connection-parameters  # noqa: E501
     config_jsonschema = th.PropertiesList(
         th.Property(
+            "authenticate_with_dope",
+            th.BooleanType,
+            default=True,
+            required=False,
+            description="Whether to authenticate using DOPE or use the default methods from the meltanolabs plugin",
+        ),
+        th.Property(
             "user",
             th.StringType,
-            required=True,
-            description="The login name for your Snowflake user.",
+            required=False,
+            description="The login name for your Snowflake user. Required unless authenticating with DOPE.",
         ),
         th.Property(
             "password",
             th.StringType,
-            required=True,
-            description="The password for your Snowflake user.",
+            required=False,
+            description="The password for your Snowflake user. Required unless authenticating with DOPE.",
         ),
         th.Property(
             "account",
             th.StringType,
-            required=True,
-            description="Your account identifier. See [Account Identifiers](https://docs.snowflake.com/en/user-guide/admin-account-identifier.html).",  # noqa: E501
-        ),
+            required=False,     
+            description="Your account identifier. Not required if authenticating with DOPE otherwise required. See [Account Identifiers](https://docs.snowflake.com/en/user-guide/admin-account-identifier.html).",        ),
         th.Property(
             "database",
             th.StringType,
